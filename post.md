@@ -129,6 +129,7 @@ wasm-bindgen = "0.2"
 [dependencies.web-sys]
 version = "0.3"
 features = [
+    "Attr",
     "Document",
     "Element",
     "HtmlElement",
@@ -148,18 +149,23 @@ To make sure it's all groovy, we're going to *very verbosely* build a DOM node. 
 // Create a title
 #[wasm_bindgen]
 pub fn mount_a_title() {
-    // get 
-    let window = web_sys::window().expect("Could not get window"); // web_sys::window(), not Window::window()
+    // get
+    let window = web_sys::window().expect("Could not get window");
     let document = window.document().expect("Could not get document");
     let body = document.body().expect("Could not get body");
 
     // create title element
-    let title = document.create_element("h1").expect("Could not create element");
+    let title = document
+        .create_element("h1")
+        .expect("Could not create element");
     let title_text = document.create_text_node("DOTS"); // always succeeds
-    title.append_child(&title_text).expect("Could not append child to title");
+    title
+        .append_child(&title_text)
+        .expect("Could not append child to title");
 
     // append to body
-    body.append_child(&title).expect("Could not append title to body");
+    body.append_child(&title)
+        .expect("Could not append title to body");
 }
 ```
 
@@ -175,6 +181,22 @@ See if it works by running `wasm-pack build` and reloading `localhost:8080`:
 
 ![dom node screenshot](https://i.imgur.com/ywMxgDS.png)
 
-Whoa.  Did you see how blazing-fast and WASM-infused that title was?!
+Whoa.  Did you see how blazing-fast and WASM-infused that title element was?!
 
-No, you didn't, but still.  Neat.
+No, you definitely didn't, but still.  Neat.
+
+Now, for the rest of the f&#%*ng owl, we just need to create the slider and the canvas:
+
+```rust
+
+```
+
+
+
+We've just defined the sliderand the canvas and refactored so that everything is called from `mount_app()`.  You'll also need to adjust `www/index.js` to call this function instead:
+
+```js
+import * as wasm from "wasm-dot";
+
+wasm.mount_app();
+```
