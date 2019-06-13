@@ -1,0 +1,24 @@
+[package]
+authors = ["deciduously <ben@deciduously.com>"]
+description = "Demo canvas wasm app"
+edition = "2018"
+license = "MIT"
+name = "wasm-dot"
+repository = "https://github.com/deciduously/wasm-dot"
+version = "0.1.0"
+[dependencies]
+wasm-bindgen = "0.2"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "Document",
+    "Element",
+    "HtmlElement",
+    "Node",
+    "Text",
+    "Window"
+]
+
+[lib]
+crate-type = ["cdylib"]
