@@ -390,7 +390,7 @@ It comes out verbose in Rust, but you get a) type safety and b) hipster cred.  A
 
 Rebuild with `wasm-pack build`, and if you have `webpack-dev-server` running (via `npm run start`) you can reload `localhost:8080`:
 
-![DOM tree screenshot](https://i.imgur.com/q3gjpHt.png)
+![DOM tree screenshot](https://i.imgur.com/yTLnwg0.png)
 
 Good stuff.
 
