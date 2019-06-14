@@ -6,7 +6,7 @@ It's been a little while since I built a resizable dot with a slider in some eso
 
 The last two demos used languages that transpile the whole app to regular ol' JavaScript to be interpreted.  This time around, we're going to be compiling our app to WebAssembly first, and then having JavaScript load that.
 
-As per usual with these dot demos, this is overkill for this app.  This one perhaps especially so.
+As per usual with these dot demos, this is overkill for this app.  This one perhaps especially so.  Roll up your sleeves, we're gonna scrob us some DOM.
 
 ## The Pipeline
 
@@ -396,3 +396,10 @@ Rebuild with `wasm-pack build`, and if you have `webpack-dev-server` running (vi
 Good stuff.
 
 ## The Loop
+
+
+snippet
+
+> .as_ref().unchecked_ref()` chain, which is who
+// you can extract `&Function`, what `web-sys` expects, from a `Closure`
+// which only hands you `&JsValue` via `AsRef`.

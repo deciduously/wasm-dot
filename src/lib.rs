@@ -4,6 +4,9 @@ use web_sys::{Document, Element, HtmlElement};
 
 type Result<T> = std::result::Result<T, JsValue>;
 
+// used for the initial render
+const STARTING_SIZE: u32 = 50;
+
 macro_rules! append_attrs {
     ($document:ident, $el:ident, $( $attr:expr ),* ) => {
         $(
@@ -56,7 +59,13 @@ fn mount_controls(document: &Document, parent: &HtmlElement) -> Result<()> {
     let div = create_element_attrs!(document, "div", ("id", "rxcanvas"));
     // span
     // TODO pass in state?  5 is hardcoded here, but you havent done state yet.
-    append_text_element_attrs!(document, div, "span", "5", ("id", "size-output"));
+    append_text_element_attrs!(
+        document,
+        div,
+        "span",
+        &format!("{}", STARTING_SIZE),
+        ("id", "size-output")
+    );
     // input
     append_element_attrs!(
         document,
@@ -83,8 +92,26 @@ fn mount_app(document: &Document, body: &HtmlElement) -> Result<()> {
 }
 
 // given a new size, sets all relevant DOM elements
-fn update_all(document: &Document, new_size: u32) -> Result<()> {
-    update_canvas(document, new_size)?;
+// this is the onChange handler
+fn update_all() -> Result<()> {
+    // get new size
+    let document = get_document()?;
+    let new_size = document
+        .get_element_by_id("size")
+        .unwrap()
+        .dyn_into::<web_sys::HtmlInputElement>()?
+        .value()
+        .parse::<u32>()
+        .expect("Could not parse slider value");
+    update_canvas(&document, new_size)?;
+    update_span(&document, new_size)?;
+    Ok(())
+}
+
+// update the size-output span
+fn update_span(document: &Document, new_size: u32) -> Result<()> {
+    let span = document.get_element_by_id("size-output").unwrap();
+    span.set_text_content(Some(&format!("{}", new_size)));
     Ok(())
 }
 
@@ -108,38 +135,51 @@ fn update_canvas(document: &Document, size: u32) -> Result<()> {
 
     context.clear_rect(0.0, 0.0, canvas.width().into(), canvas.height().into());
     // create shape around center point (radius, radius)
-    const PI: f64 = 3.14159265;
     context.begin_path();
-    context.arc(size.into(), size.into(), size.into(), 0.0, 2.0 * PI)?;
+    context.arc(
+        size.into(),
+        size.into(),
+        size.into(),
+        0.0,
+        2.0 * std::f64::consts::PI,
+    )?;
     context.fill();
     context.stroke();
 
     Ok(())
 }
 
-fn run_loop(document: &Document, _body: &HtmlElement) -> Result<()> {
+fn run_loop(document: &Document) -> Result<()> {
     // listen for size change events
 
-    // set initial size
-    let size = 50;
-    update_all(document, size)?;
+    update_all()?; // call once to before any changes
 
-    // add onchange listener to slider
-    //document.get_element_by_id("size").unwrap().add_event_listener("onChange", )
+    let callback = Closure::wrap(Box::new(move |_evt: web_sys::Event| {
+        update_all().expect("Could not update");
+    }) as Box<dyn Fn(_)>);
 
-    // this will update the canvas, the slider itself, and the span
+    document
+        .get_element_by_id("size")
+        .unwrap()
+        .dyn_into::<web_sys::HtmlInputElement>()?
+        .set_onchange(Some(callback.as_ref().unchecked_ref()));
+
+    callback.forget(); // leaks memory!
 
     Ok(())
 }
 
+fn get_document() -> Result<Document> {
+    let window = web_sys::window().unwrap();
+    Ok(window.document().unwrap())
+}
+
 #[wasm_bindgen]
 pub fn run() -> Result<()> {
-    // get window/document/body
-    let window = web_sys::window().unwrap();
-    let document = window.document().unwrap();
+    let document = get_document()?;
     let body = document.body().unwrap();
 
     mount_app(&document, &body)?;
-    run_loop(&document, &body)?;
+    run_loop(&document)?;
     Ok(())
 }
