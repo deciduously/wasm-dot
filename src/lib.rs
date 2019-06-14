@@ -1,146 +1,100 @@
 use wasm_bindgen::prelude::*;
 use web_sys::{Document, Element, HtmlElement};
 
-// Create a title
-fn mount_a_title(document: &Document, body: &HtmlElement) {
-    // create title element
-    let title = document
-        .create_element("h1")
-        .expect("Could not create element");
-    let title_text = document.create_text_node("DOTS"); // always succeeds
-    title
-        .append_child(&title_text)
-        .expect("Could not append child to title");
-
-    // append to body
-    body.append_child(&title)
-        .expect("Could not append title to body");
+macro_rules! append_attrs {
+    ($document:ident, $el:ident, $( $attr:expr ),* ) => {
+        $(
+            let attr = $document.create_attribute($attr.0).expect("Could not create attribute");
+            attr.set_value($attr.1);
+            $el.set_attribute_node(&attr).expect("Could not set attribute");
+        )*
+    }
 }
 
-// Mount the slider
-fn mount_slider_input(document: &Document, parent: &Element) {
-    // element
-    let slider = document
-        .create_element("input")
-        .expect("Could not create input element");
-
-    // type attr
-    let slider_type = document
-        .create_attribute("type")
-        .expect("Could not create attribute");
-    slider_type.set_value("range");
-    slider
-        .set_attribute_node(&slider_type)
-        .expect("Could not set attribute");
-
-    // min attr
-    let min = document
-        .create_attribute("min")
-        .expect("Could not create attribute");
-    min.set_value("5");
-    slider.set_attribute_node(&min).expect("");
-
-    // max attr
-    let max = document
-        .create_attribute("max")
-        .expect("Could not create attribute");
-    max.set_value("100");
-    slider
-        .set_attribute_node(&max)
-        .expect("Could not set attribute");
-
-    // step attr
-    let step = document
-        .create_attribute("step")
-        .expect("Could not create attribute");
-    step.set_value("5");
-    slider
-        .set_attribute_node(&step)
-        .expect("Could not set attribute");
-
-    // id attr
-    let id = document
-        .create_attribute("id")
-        .expect("Could not create attribute");
-    id.set_value("size");
-    slider
-        .set_attribute_node(&id)
-        .expect("Could not set attribute");
-
-    // min/max/step/id
-    parent
-        .append_child(&slider)
-        .expect("Could not create slider");
+macro_rules! append_text_child {
+    ($document:ident, $el:ident, $text:expr ) => {
+        let text = $document.create_text_node($text);
+        $el.append_child(&text).expect("Could not append text node");
+    };
 }
 
-fn mount_slider_label(document: &Document, parent: &Element) {
-    let label = document
-        .create_element("label")
-        .expect("Could not create element");
-
-    let for_attr = document
-        .create_attribute("for")
-        .expect("Could not create attribute");
-    for_attr.set_value("size");
-    label
-        .set_attribute_node(&for_attr)
-        .expect("Could not append child");
-
-    parent.append_child(&label).expect("Could not append child");
+macro_rules! create_element_attrs {
+    ($document:ident, $type:expr, $( $attr:expr ),* ) => {{
+        let el = $document.create_element($type).expect("Could not create element");
+        append_attrs!($document, el, $( $attr ),*);
+        el}
+    }
 }
 
-fn mount_size_span(document: &Document, parent: &Element) {
-    let span = document
-        .create_element("span")
-        .expect("Could not create element");
-    let id = document
-        .create_attribute("id")
-        .expect("Could not create attribute");
-    id.set_value("size-output");
-    span.set_attribute_node(&id)
-        .expect("Could not set attribute");
-    parent.append_child(&span).expect("Could not append child");
+macro_rules! append_element_attrs {
+    ($document:ident, $parent:ident, $type:expr, $( $attr:expr ),* ) => {
+        let el = create_element_attrs!($document, $type, $( $attr ),* );
+        $parent.append_child(&el).expect("Could not append child");
+    }
+}
+
+macro_rules! append_text_element_attrs {
+    ($document:ident, $parent:ident, $type:expr, $text:expr, $( $attr:expr ),*) => {
+        let el = create_element_attrs!($document, $type, $( $attr ),* );
+        append_text_child!($document, el, $text);
+        $parent.append_child(&el).expect("Could not append child");
+    }
 }
 
 fn mount_canvas(document: &Document, parent: &Element) {
-    // this is wrapping in a <p>
-    let p = document
-        .create_element("p")
-        .expect("Could not create element");
-    let canvas = document
-        .create_element("canvas")
-        .expect("Could not create element");
-    p.append_child(&canvas).expect("Could not append child");
+    let p = create_element_attrs!(document, "p",);
+    append_element_attrs!(document, p, "canvas",);
     parent.append_child(&p).expect("Could not append child");
 }
 
 fn mount_controls(document: &Document, parent: &HtmlElement) {
-    /*
-    <div>
-        <span>
-        <input>
-        <label>
-        <canvas>
-    </div>
-    */
-    let div = document
-        .create_element("div")
-        .expect("Could not create element");
-
-    mount_size_span(&document, &div);
-    mount_slider_input(&document, &div);
-    mount_slider_label(&document, &div);
+    // containing div
+    let div = create_element_attrs!(document, "div", ("id", "rxcanvas"));
+    // span
+    // TODO pass in state?  5 is hardcoded here, but you havent done state yet.
+    append_text_element_attrs!(document, div, "span", "5", ("id", "size-output"));
+    // input
+    append_element_attrs!(
+        document,
+        div,
+        "input",
+        ("id", "size"),
+        ("type", "range"),
+        ("min", "5"),
+        ("max", "100"),
+        ("step", "5")
+    );
+    // label
+    append_text_element_attrs!(document, div, "label", "- Size", ("for", "size"));
+    // canvas
     mount_canvas(&document, &div);
     parent.append_child(&div).expect("Could not append child");
 }
 
+fn mount_app(document: &Document, body: &HtmlElement) {
+    append_text_element_attrs!(document, body, "h1", "DOT",);
+    mount_controls(&document, &body);
+}
+
+fn run_loop(document: &Document, body: &HtmlElement) {
+    // listen for size change events
+
+    // set initial size
+    let mut size = 5;
+
+    // add onchange listener to slider
+    //document.get_element_by_id()
+
+    // this will update the canvas, the slider itself, and the span
+}
+
 #[wasm_bindgen]
-pub fn mount_app() {
+pub fn run() {
     // get window/document/body
     let window = web_sys::window().expect("Could not get window");
     let document = window.document().expect("Could not get document");
     let body = document.body().expect("Could not get body");
 
-    mount_a_title(&document, &body);
-    mount_controls(&document, &body);
+    mount_app(&document, &body);
+    run_loop(&document, &body);
 }

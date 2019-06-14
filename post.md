@@ -1,14 +1,16 @@
 # Reactive Canvas with Rust/WebAssembly and web-sys
 
+## Or How I learn To Stop Worrying And Love Macros
+
 It's been a little while since I built a resizable dot with a slider in some esoteric stack.  Time for Chapter 3!  I guess it's a series now.
 
 The last two demos used languages that transpile the whole app to regular ol' JavaScript to be interpreted.  This time around, we're going to be compiling our app to WebAssembly first, and then having JavaScript load that.
 
-As per usual with these dots, this is overkill for this app.  Way, *way* overkill.
+As per usual with these dot demos, this is overkill for this app.  This one perhaps especially so.
 
-## Setup
+## The Pipeline
 
-This section is largely copped straight outta the [RustWasm Book](https://rustwasm.github.io/docs/book/game-of-life/hello-world.html).  If you plan to do further work with Rust and WebAssembly, head straight there next (or now).  You'll need a Rust toolchain and NPM to follow along.
+This section is largely copped straight outta the [RustWasm Book](https://rustwasm.github.io/docs/book/game-of-life/hello-world.html).  If you plan to do further work with Rust and WebAssembly, head straight there next (or now).  You'll need a Rust toolchain and Node/NPM to follow along.
 
 First, create a new library-type crate:
 
@@ -118,7 +120,7 @@ One thing to keep in mind when programming this way is that the memory you're wo
 
 Before we look at the JavaScript side, let's build the Rust app.  This will contain the slider element, the canvas element, and the logic.
 
-## Rust
+## The Layout
 
 To deal with the JavaScript universe, the `wasm-bindgen` project provides two important crates: `web-sys` provides bindings for all the Web APIS (!!) and `js-sys` provides all the ECMAScript stuff like `Array` and `Date` (!!).  Yeah, they already did the hard work.  It's pretty cool, you don't need to manually define a `Document.createElement` extern or anything.  Instead, just pull in what we need from `web-sys` in `Cargo.toml`:
 
@@ -143,22 +145,30 @@ It's a huge crate, so each interface is feature-gated.  You only use what you ne
 
 ![feature gate screenshot](https://i.imgur.com/thITZh3.png)
 
-To make sure it's all groovy, we're going to *very verbosely* build a DOM node.  Remove the `alert()` test in `src/lib.rs` and add:
+To make sure it's all groovy, we're going to build a DOM node ourselves, JS-style but, like, also Rust-style.  Remove the `alert()` test in `src/lib.rs` and add:
 
 ```rust
-// Create a title
 #[wasm_bindgen]
-pub fn mount_a_title() {
-    // get
+pub fn run() {
+    // get window/document/body
     let window = web_sys::window().expect("Could not get window");
     let document = window.document().expect("Could not get document");
     let body = document.body().expect("Could not get body");
 
+    mount_app(&document, &body);
+}
+
+fn mount_app(document: &Document, body: &HtmlElement) {
+    mount_title(&document, &body);
+}
+
+// Create a title
+fn mount_title(document: &Document, body: &HtmlElement) {
     // create title element
     let title = document
         .create_element("h1")
         .expect("Could not create element");
-    let title_text = document.create_text_node("DOTS"); // always succeeds
+    let title_text = document.create_text_node("DOT"); // always succeeds
     title
         .append_child(&title_text)
         .expect("Could not append child to title");
@@ -169,23 +179,155 @@ pub fn mount_a_title() {
 }
 ```
 
-Now instead of `say_hi()` we'll need to call `mount_a_title()` in `www/index.js`:
+Now instead of `say_hi()` we'll need to call `run()` in `www/index.js`:
 
 ```js
 import * as wasm from "wasm-dot";
 
-wasm.mount_a_title();
+wasm.run();
 ```
 
 See if it works by running `wasm-pack build` and reloading `localhost:8080`:
 
-![dom node screenshot](https://i.imgur.com/ywMxgDS.png)
+![dom node screenshot](https://i.imgur.com/7yiqu7f.png)
 
-Whoa.  Did you see how blazing-fast and WASM-infused that title element was?!
+Whoa.  Did you see how blazing-fast and WASM-infused that title was?!
 
-No, you definitely didn't, but still.  Neat.
+No, you didn't, but still.  Neat.
 
-Now, for the rest of the f&#%*ng owl, we just need to create the slider and the canvas:
+Next we need to define the DOM tree we want.  Here's what we're aiming for in HTML:
+
+```html
+  <div id="rxcanvas">
+    <span id="size-output"></span>
+    <input id="size" type="range" min="1" max="100" step="5">
+    <label for="size">- Size</label>
+    <p>
+      <canvas></canvas>
+    </p>
+  </div>
+```
+
+If you've ever manipulated the DOM via JavaScript, you're pretty much good to go.  In Rust, though, this is *so verbose*.  I promised up above there would be macros - here we go.
+
+For the uninitiated, a macro is a bit of code that expands into other code *before* everything else is evaluated.  In Rust, they look like function calls but with an exclamation point at the end.  They aren't function calls at all though - when the compiler comes through your module, it expands all of these anywhere they find them into the full Rust code you (or a library) defined.
+
+The syn
+
+Rust actually has another type of macro called a [procedural macro](https://blog.rust-lang.org/2018/12/21/Procedural-Macros-in-Rust-2018.html) that's *even more powerful and arcane* but for now `macro_rules!` will do us just fine.
+
+This is the only place in Rust you'll see that `macro_rules! thing { () => {} }` bracket pattern.  It's it's own special syntax.  The parameters in parens are copied in to the Rust code in the curly braces during expansion, right in place in your code.  For example, this is ``
+
+```rust
+macro_rules! append_attrs {
+    ($document:ident, $el:ident, $( $attr:expr ),* ) => {
+        $(
+            let attr = $document.create_attribute($attr.0).expect("Could not create attribute");
+            attr.set_value($attr.1);
+            $el.set_attribute_node(&attr).expect("Could not set attribute");
+        )*
+    }
+}
+```
+
+When called, each one will just paste this block of Rust into our function in place, using what we pass in.  The first one, `append_attrs!()`, is variadic.  The `$( $name:expr ),*` syntax means that it will carry out this block for zero or more arguments given, pasting the block in the curly braces to match.  Each time through, the arg we're processing gets the name $attr.
+
+You can call it like this, with as many trailing tuple arguments as needed for each attribute:
+
+```rust
+append_attrs!(document, label, ("for", "size"));
+```
+
+We can do better, though - macros can call other macros!  We can boil everything down to the bare minimum by defining a few more helpers:
+
+```rust
+macro_rules! append_text_child {
+    ($document:ident, $el:ident, $text:expr ) => {
+        let text = $document.create_text_node($text);
+        $el.append_child(&text).expect("Could not append text node");
+    }
+}
+
+macro_rules! create_element_attrs {
+    ($document:ident, $type:expr, $( $attr:expr ),* ) => {{
+        let el = $document.create_element($type).expect("Could not create element");
+        append_attrs!($document, el, $( $attr),*);
+        el}
+    }
+}
+
+macro_rules! append_element_attrs {
+    ($document:ident, $parent:ident, $type:expr, $( $attr:expr ),* ) => {
+        let el = create_element_attrs!($document, $type, $( $attr),* );
+        $parent.append_child(&el).expect("Could not append child");
+    }
+}
+
+macro_rules! append_text_element_attrs {
+    ($document:ident, $parent:ident, $type:expr, $text:expr, $( $attr:expr ),*) => {
+        let el = create_element_attrs!($document, $type, $( $attr),* );
+        append_text_child!($document, el, $text);
+        $parent.append_child(&el).expect("Could not append child");
+    }
+}
+
+```
+
+There are two "top-level" macros, `append_element_attrs` and `append_text_element_attrs`.  The former will append a childless element with the given attributes to the parent provided and the latter will include a text node child.  Note that to pass the variadic trailing arguments down you just use the same syntax inside the curly brace expansion but omit the `expr` type:
+
+```rust
+let el = create_element_attrs!($document, $type, $( $attr ),* );
+```
+
+Now we can replace the entirety of `mount_title()` with a macro invocation:
+
+```rust
+fn mount_app(document: &Document, body: &HtmlElement) {
+    append_text_element_attrs!(document, body, "h1", "DOT",);
+}
+```
+
+Note the trailing comma is mandatory - that's the "zero or more" attributes the macro accepts.  That's so much boilerplate we've avoided though.  The above function is what the compiler sees when building the binary, we just saved ourselves the hassle of typing it all.  Thanks, macros!  Thacros.
+
+Here's the whole f#@%!^g owl:
+
+```rust
+fn mount_canvas(document: &Document, parent: &Element) {
+    let p = create_element_attrs!(document, "p",);
+    append_element_attrs!(document, p, "canvas",);
+    parent.append_child(&p).expect("Could not append child");
+}
+
+fn mount_controls(document: &Document, parent: &HtmlElement) {
+    // containing div
+    let div = create_element_attrs!(document, "div", ("id", "rxcanvas"));
+    // span
+    append_text_element_attrs!(document, div, "span", "5", ("id", "size-output"));
+    // input
+    append_element_attrs!(
+        document,
+        div,
+        "input",
+        ("id", "size"),
+        ("type", "range"),
+        ("min", "5"),
+        ("max", "100"),
+        ("step", "5")
+    );
+    // label
+    append_text_element_attrs!(document, div, "label", "- Size", ("for", "size"));
+    // canvas
+    mount_canvas(&document, &div);
+    parent.append_child(&div).expect("Could not append child");
+}
+
+fn mount_app(document: &Document, body: &HtmlElement) {
+    append_text_element_attrs!(document, body, "h1", "DOT",);
+    mount_controls(&document, &body);
+}
+```
+
+Fully expanded, that slider input alone would be clunky:
 
 ```rust
 // Mount the slider
@@ -194,6 +336,15 @@ fn mount_slider_input(document: &Document, parent: &Element) {
     let slider = document
         .create_element("input")
         .expect("Could not create input element");
+
+    // id attr
+    let id = document
+        .create_attribute("id")
+        .expect("Could not create attribute");
+    id.set_value("size");
+    slider
+        .set_attribute_node(&id)
+        .expect("Could not set attribute");
 
     // type attr
     let slider_type = document
@@ -209,7 +360,7 @@ fn mount_slider_input(document: &Document, parent: &Element) {
         .create_attribute("min")
         .expect("Could not create attribute");
     min.set_value("5");
-    slider.set_attribute_node(&min).expect("");
+    slider.set_attribute_node(&min).expect("Could not set attribute");
 
     // max attr
     let max = document
@@ -229,89 +380,18 @@ fn mount_slider_input(document: &Document, parent: &Element) {
         .set_attribute_node(&step)
         .expect("Could not set attribute");
 
-    // id attr
-    let id = document
-        .create_attribute("id")
-        .expect("Could not create attribute");
-    id.set_value("size");
-    slider
-        .set_attribute_node(&id)
-        .expect("Could not set attribute");
-
-    // min/max/step/id
     parent
         .append_child(&slider)
-        .expect("Could not create slider");
-}
-
-fn mount_slider_label(document: &Document, parent: &Element) {
-    let label = document
-        .create_element("label")
-        .expect("Could not create element");
-
-    let for_attr = document
-        .create_attribute("for")
-        .expect("Could not create attribute");
-    for_attr.set_value("size");
-    label
-        .set_attribute_node(&for_attr)
         .expect("Could not append child");
-
-    parent.append_child(&label).expect("Could not append child");
-}
-
-fn mount_size_span(document: &Document, parent: &Element) {
-    let span = document
-        .create_element("span")
-        .expect("Could not create element");
-    let id = document
-        .create_attribute("id")
-        .expect("Could not create attribute");
-    id.set_value("size-output");
-    span.set_attribute_node(&id)
-        .expect("Could not set attribute");
-    parent.append_child(&span).expect("Could not append child");
-}
-
-fn mount_canvas(document: &Document, parent: &Element) {
-    // this is wrapping in a <p>
-    let p = document
-        .create_element("p")
-        .expect("Could not create element");
-    let canvas = document
-        .create_element("canvas")
-        .expect("Could not create element");
-    p.append_child(&canvas).expect("Could not append child");
-    parent.append_child(&p).expect("Could not append child");
-}
-
-fn mount_controls(document: &Document, parent: &HtmlElement) {
-    /*
-    <div>
-        <span>
-        <input>
-        <label>
-        <canvas>
-    </div>
-    */
-    let div = document
-        .create_element("div")
-        .expect("Could not create element");
-
-    mount_size_span(&document, &div);
-    mount_slider_input(&document, &div);
-    mount_slider_label(&document, &div);
-    mount_canvas(&document, &div);
-    parent.append_child(&div).expect("Could not append child");
 }
 ```
-Now we just call `mount_controls` inside of `mount_app`.  Yes, this is tedious and verbose - building abstractions or leveraging crates to make this task easier is left as an exercise for the reader :)
 
-For now, though, we've defined the DOM tree we need and refactored so that everything is called from `mount_app()`.  You'll also need to adjust `www/index.js` to call this function instead:
+It comes out verbose in Rust, but you get a) type safety and b) hipster cred.  All the `web_sys` calls look very familiar if you're coming from JavaScript.  If you want a Web API function, just try looking for it in the [`web-sys` API docs](https://rustwasm.github.io/wasm-bindgen/api/web_sys/).  Each listing will conveniently link to the corresponding MDN page, too!  Leveraging crates or writing your own abstractions to make this smoother is both quite possible and left as an exercise for the reader.
 
-```js
-import * as wasm from "wasm-dot";
+Rebuild with `wasm-pack build`, and if you have `webpack-dev-server` running (via `npm run start`) you can reload `localhost:8080`:
 
-wasm.mount_app();
-```
+![DOM tree screenshot](https://i.imgur.com/q3gjpHt.png)
 
+Good stuff.
+
+## The Loop
