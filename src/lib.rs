@@ -149,10 +149,10 @@ fn update_canvas(document: &Document, size: u32) -> Result<()> {
     Ok(())
 }
 
-fn run_loop(document: &Document) -> Result<()> {
+fn attach_listener(document: &Document) -> Result<()> {
     // listen for size change events
 
-    update_all()?; // call once to before any changes
+    update_all()?; // call once for initial render before any changes
 
     let callback = Closure::wrap(Box::new(move |_evt: web_sys::Event| {
         update_all().expect("Could not update");
@@ -180,6 +180,6 @@ pub fn run() -> Result<()> {
     let body = document.body().unwrap();
 
     mount_app(&document, &body)?;
-    run_loop(&document)?;
+    attach_listener(&document)?;
     Ok(())
 }
