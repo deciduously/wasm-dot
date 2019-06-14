@@ -134,6 +134,7 @@ features = [
     "Attr",
     "Document",
     "Element",
+    "EventTarget",
     "HtmlElement",
     "Node",
     "Text",
@@ -203,7 +204,7 @@ Next we need to define the DOM tree we want.  Here's what we're aiming for in HT
     <input id="size" type="range" min="1" max="100" step="5">
     <label for="size">- Size</label>
     <p>
-      <canvas></canvas>
+      <canvas id="dot-canvas"></canvas>
     </p>
   </div>
 ```
@@ -212,11 +213,11 @@ If you've ever manipulated the DOM via JavaScript, you're pretty much good to go
 
 For the uninitiated, a macro is a bit of code that expands into other code *before* everything else is evaluated.  In Rust, they look like function calls but with an exclamation point at the end.  They aren't function calls at all though - when the compiler comes through your module, it expands all of these anywhere they find them into the full Rust code you (or a library) defined.
 
-The syn
+This syntax is the only place in Rust you'll see that `macro_rules! thing { () => {} }` bracket pattern.  It's it's own special syntax.  The parameters in parens are copied in to the Rust code in the curly braces during expansion, right in place in your code.  For example, this is ``
 
 Rust actually has another type of macro called a [procedural macro](https://blog.rust-lang.org/2018/12/21/Procedural-Macros-in-Rust-2018.html) that's *even more powerful and arcane* but for now `macro_rules!` will do us just fine.
 
-This is the only place in Rust you'll see that `macro_rules! thing { () => {} }` bracket pattern.  It's it's own special syntax.  The parameters in parens are copied in to the Rust code in the curly braces during expansion, right in place in your code.  For example, this is ``
+Here's a macro to append an arbitrary number of attributes to a DOM element, passed as 2-tuples:
 
 ```rust
 macro_rules! append_attrs {
@@ -230,7 +231,7 @@ macro_rules! append_attrs {
 }
 ```
 
-When called, each one will just paste this block of Rust into our function in place, using what we pass in.  The first one, `append_attrs!()`, is variadic.  The `$( $name:expr ),*` syntax means that it will carry out this block for zero or more arguments given, pasting the block in the curly braces to match.  Each time through, the arg we're processing gets the name $attr.
+When called, each one will just paste this block of Rust into our function in place, using what we pass in.  The first one, `append_attrs!()`, is variadic.  The `$( $name:expr ),*` syntax means that it will carry out this block for zero or more arguments given, pasting the block in the curly braces to match.  Each time through, the arg we're processing gets the name `$attr`.
 
 You can call it like this, with as many trailing tuple arguments as needed for each attribute:
 
@@ -279,7 +280,7 @@ There are two "top-level" macros, `append_element_attrs` and `append_text_elemen
 let el = create_element_attrs!($document, $type, $( $attr ),* );
 ```
 
-Now we can replace the entirety of `mount_title()` with a macro invocation:
+Now we can replace the entirety of that `mount_title()` function with a single macro invocation:
 
 ```rust
 fn mount_app(document: &Document, body: &HtmlElement) {
@@ -294,7 +295,7 @@ Here's the whole f#@%!^g owl:
 ```rust
 fn mount_canvas(document: &Document, parent: &Element) {
     let p = create_element_attrs!(document, "p",);
-    append_element_attrs!(document, p, "canvas",);
+    append_element_attrs!(document, p, "canvas", ("id", "dot-canvas"));
     parent.append_child(&p).expect("Could not append child");
 }
 
